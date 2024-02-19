@@ -13,6 +13,7 @@ find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(pcl_conversions REQUIRED)
+find_package(pcl_ros REQUIRED)
 find_package(PCL REQUIRED)
 
 include_directories(
@@ -21,7 +22,7 @@ include_directories(
 )
 
 add_executable(go_under_trolley src/go_under_trolley.cpp)
-ament_target_dependencies(go_under_trolley rclcpp std_msgs geometry_msgs sensor_msgs visualization_msgs pcl_conversions)
+ament_target_dependencies(go_under_trolley rclcpp std_msgs geometry_msgs sensor_msgs visualization_msgs pcl_conversions PCL pcl_ros)
 
 install(TARGETS
   go_under_trolley

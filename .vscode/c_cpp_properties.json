@@ -1,0 +1,30 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "${default}",
+        "limitSymbolsToIncludedHeaders": false
+      },
+      "includePath": [
+        "/home/michael/ros2_ws/install/talosbot_custom_interfaces/include/**",
+        "/home/michael/ros2_ws/install/btcpp_ros2_interfaces/include/**",
+        "/home/michael/ros2_ws/install/behaviortree_ros2/include/**",
+        "/home/michael/ros2_ws/install/behaviortree_cpp/include/**",
+        "/home/michael/ros2_ws/install/action_sample_interfaces/include/**",
+        "/opt/ros/humble/include/**",
+        "/home/michael/ros2_ws/src/BehaviorTree.CPP/include/**",
+        "/home/michael/ros2_ws/src/BehaviorTree.ROS2/behaviortree_ros2/include/**",
+        "/home/michael/ros2_ws/src/talosbot/example/action_sample_cpp/include/**",
+        "/home/michael/ros2_ws/src/talosbot/talosbot_action/include/**",
+        "/home/michael/ros2_ws/src/talosbot/talosbot_bt/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS",
+      "intelliSenseMode": "gcc-x64",
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11",
+      "cppStandard": "c++14"
+    }
+  ],
+  "version": 4
+}
