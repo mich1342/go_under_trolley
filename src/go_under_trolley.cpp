@@ -49,7 +49,8 @@ public:
 private:
   void cmd_callback()
   {
-    if ((target_x_ != NULL) && (target_y_ != NULL) && (pre_target_x_ != NULL) && (pre_target_y_ != NULL) && (go_))
+    if ((target_x_ != NULL) && (target_y_ != NULL) && (pre_target_x_ != NULL) && (pre_target_y_ != NULL) &&
+        (go_ || bypass_go_))
     {
       geometry_msgs::msg::Twist vel_msg_;
       vel_msg_.linear.x = 0.00;
@@ -317,7 +318,7 @@ private:
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_pub_;
 
   bool go_ = false;
-
+  bool bypass_go_ = true;
   bool pre_position_achieved_ = false;
   bool heading_achieved_ = false;
   float pre_target_x_ = NULL;
