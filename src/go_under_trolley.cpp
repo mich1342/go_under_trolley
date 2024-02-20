@@ -34,6 +34,8 @@ public:
     unfiltered_cloud_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
         "/cloud_in", rclcpp::SensorDataQoS(),
         std::bind(&GoUnderTrolley::cloud_sub_callback, this, std::placeholders::_1));
+    go_sub_ = this->create_subscription<std_msgs::msg::String>(
+        "/go_under_trolley", 10, std::bind(&GoUnderTrolley::go_sub_callback, this, std::placeholders::_1));
     // laser_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
     //     "scan", 10, std::bind(&GoUnderTrolley::scan_callback, this, std::placeholders::_1));
     filtered_cloud_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/filtered_cloud", 10);
@@ -47,34 +49,92 @@ public:
 private:
   void cmd_callback()
   {
-    if ((target_x_ != NULL) && (target_y_ != NULL))
+    if ((target_x_ != NULL) && (target_y_ != NULL) && (pre_target_x_ != NULL) && (pre_target_y_ != NULL) && (go_))
     {
       geometry_msgs::msg::Twist vel_msg_;
       vel_msg_.linear.x = 0.00;
       vel_msg_.linear.y = 0.00;
       vel_msg_.angular.z = 0.00;
-      if (target_x_ <= -0.13)
+      if (pre_position_achieved_)
       {
-        cmd_pub_->publish(vel_msg_);
-        goal_reached_count_++;
-        if (goal_reached_count_ >= 40)
+        if (heading_achieved_)
         {
-          exit(0);
+          if (target_x_ <= -0.10)
+          {
+            cmd_pub_->publish(vel_msg_);
+            goal_reached_count_++;
+            if (goal_reached_count_ >= 40)
+            {
+              exit(0);
+            }
+          }
+          else
+          {
+            vel_msg_.linear.x = 0.15;
+            if (fabs(target_y_) >= 0.05)
+            {
+              vel_msg_.angular.z = target_y_ * 0.6;
+            }
+            else
+            {
+              vel_msg_.angular.z = -target_y_diff_ * 0.5;
+            }
+            cmd_pub_->publish(vel_msg_);
+          }
+        }
+        else
+        {
+          if (fabs(target_y_diff_) >= 0.05)
+          {
+            vel_msg_.linear.x = 0;
+            vel_msg_.angular.z = -target_y_diff_ * 0.5;
+            cmd_pub_->publish(vel_msg_);
+          }
+          else
+          {
+            cmd_pub_->publish(vel_msg_);
+            heading_achieved_ = true;
+            go_ = false;
+          }
         }
       }
       else
       {
-        vel_msg_.linear.x = 0.15;
-        if (fabs(target_y_) >= 0.05)
+        if ((pre_target_x_ <= 0.04) && (fabs(pre_target_y_) < 0.04))
         {
-          vel_msg_.angular.z = target_y_ * 0.6;
+          cmd_pub_->publish(vel_msg_);
+          pre_position_achieved_ = true;
+          go_ = false;
         }
-        // else
-        // {
-        //   vel_msg_.angular.z = -target_y_diff_ * 0.5;
-        // }
-        cmd_pub_->publish(vel_msg_);
+        else
+        {
+          if (fabs(pre_target_y_) >= 0.03)
+          {
+            vel_msg_.angular.z = pre_target_y_ * 0.8;
+            vel_msg_.linear.x = 0.0;
+          }
+          else
+          {
+            if (pre_target_x_ > 0)
+            {
+              vel_msg_.linear.x = 0.10;
+            }
+            else
+            {
+              vel_msg_.linear.x = -0.10;
+            }
+            vel_msg_.angular.z = pre_target_y_ * 0.6;
+          }
+          cmd_pub_->publish(vel_msg_);
+        }
       }
+    }
+  }
+  void go_sub_callback(std_msgs::msg::String::SharedPtr msg)
+  {
+    if (msg->data == "GO")
+    {
+      go_ = true;
     }
   }
   void cloud_sub_callback(sensor_msgs::msg::PointCloud2::SharedPtr msg)
@@ -96,7 +156,7 @@ private:
     // clustering points in point cloud for identifying the legs of items to pickup
     std::vector<pcl::PointIndices> cluster_indices;
     pcl::EuclideanClusterExtraction<pcl::PointXYZRGB> ece;
-    ece.setClusterTolerance(0.4);  // 20cm
+    ece.setClusterTolerance(0.45);  // 20cm
     ece.setMinClusterSize(3);
     ece.setMaxClusterSize(50);
     ece.setSearchMethod(tree);
@@ -105,7 +165,7 @@ private:
     // try
     // {
     ece.extract(cluster_indices);
-    RCLCPP_INFO(this->get_logger(), "ece indices %ld", cluster_indices.size());
+    // RCLCPP_INFO(this->get_logger(), "ece indices %ld", cluster_indices.size());
 
     // creating different point cloud instances based on clusters and adding different color
     std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> cloud_clusters;
@@ -165,9 +225,9 @@ private:
           float distance = sqrt(((x2 - x1) * (x2 - x1)) + ((y2 - y1) * (y2 - y1)));
           distance = fabs(distance);
 
-          if (distance < 1.25 && distance > 1.05)
+          if (distance < 1.45 && distance > 1.35)
           {
-            RCLCPP_INFO(this->get_logger(), "distance %f", distance);
+            // RCLCPP_INFO(this->get_logger(), "distance %f", distance);
             std::pair<float, float> first_point_pair;
             first_point_pair.first = x1;
             first_point_pair.second = y1;
@@ -180,24 +240,11 @@ private:
             length_points.push_back(second_point_pair);
           }
         }
-        // else if (distance < 1.10 && distance > 0.90)
-        // {
-        //   std::pair<float, float> first_point_pair;
-        //   first_point_pair.first = x1;
-        //   first_point_pair.second = y1;
-
-        //   std::pair<float, float> second_point_pair;
-        //   second_point_pair.first = x2;
-        //   second_point_pair.second = y2;
-
-        //   breadth_points.push_back(first_point_pair);
-        //   breadth_points.push_back(second_point_pair);
-        // }
       }
     }
 
-    RCLCPP_INFO(this->get_logger(), "length %ld", length_points.size());
-    RCLCPP_INFO(this->get_logger(), "breadth %ld", breadth_points.size());
+    // RCLCPP_INFO(this->get_logger(), "length %ld", length_points.size());
+    // RCLCPP_INFO(this->get_logger(), "breadth %ld", breadth_points.size());
     pcl::PointCloud<pcl::PointXYZRGB> cloud_;
     pcl::PointXYZRGB pt;
 
@@ -219,60 +266,36 @@ private:
         pt.x = length_points.at(1).first;
         pt.y = length_points.at(1).second;
         cloud_.points.push_back(pt);
-        RCLCPP_INFO(this->get_logger(), "cent_x %f", x1);
-        RCLCPP_INFO(this->get_logger(), "cent_y %f", y1);
+        // RCLCPP_INFO(this->get_logger(), "cent_x %f", x1);
+        // RCLCPP_INFO(this->get_logger(), "cent_y %f", y1);
         target_x_ = x1;
         target_y_ = y1;
-        target_y_diff_ = length_points.at(0).second - length_points.at(1).second;
+
+        if (length_points.at(0).second > length_points.at(1).second)
+        {
+          target_y_diff_ = length_points.at(0).first - length_points.at(1).first;
+        }
+        else
+        {
+          target_y_diff_ = length_points.at(1).first - length_points.at(0).first;
+        }
+
+        float dx = target_y_diff_ * L_ / D_;
+        float dy = (std::sqrt(L_ * L_ - dx * dx));
+
+        pre_target_x_ = target_x_ - dy;
+        pre_target_y_ = target_y_ + dx;
+        RCLCPP_INFO(this->get_logger(), "pre_cent_x %f", pre_target_x_);
+        RCLCPP_INFO(this->get_logger(), "pre_cent_y %f", pre_target_y_);
+        pt = pcl::PointXYZRGB((uint8_t)255, (uint8_t)0, (uint8_t)255);
+        pt.x = pre_target_x_;
+        pt.y = pre_target_y_;
+        cloud_.points.push_back(pt);
+        pt = pcl::PointXYZRGB((uint8_t)0, (uint8_t)255, (uint8_t)255);
+        pt.x = 0;
+        pt.y = 0;
+        cloud_.points.push_back(pt);
       }
-      // float x2 = ((length_points.at(2).first + length_points.at(3).first) / 2);
-      // float y2 = ((length_points.at(2).second + length_points.at(3).second) / 2);
-
-      // float cent_x, cent_y;
-      // if (fabs(x1 - x2) < fabs(y1 - y2))
-      // {
-      //   cent_y = ((y1 + y2) / 2);
-      // }
-      // else
-      // {
-      //   cent_x = ((x1 + x2) / 2);
-      // }
-
-      // if (length_points.size() == 4 && breadth_points.size() == 4)
-      // {
-      //   float x1 = ((length_points.at(0).first + length_points.at(1).first) / 2);
-      //   float y1 = ((length_points.at(0).second + length_points.at(1).second) / 2);
-
-      //   float x2 = ((length_points.at(2).first + length_points.at(3).first) / 2);
-      //   float y2 = ((length_points.at(2).second + length_points.at(3).second) / 2);
-
-      //   float x3 = ((breadth_points.at(0).first + breadth_points.at(1).first) / 2);
-      //   float y3 = ((breadth_points.at(0).second + breadth_points.at(1).second) / 2);
-
-      //   float x4 = ((breadth_points.at(2).first + breadth_points.at(3).first) / 2);
-      //   float y4 = ((breadth_points.at(2).second + breadth_points.at(3).second) / 2);
-
-      //   float cent_x, cent_y;
-      //   if (fabs(x1 - x2) < fabs(y1 - y2))
-      //   {
-      //     cent_y = ((y1 + y2) / 2);
-      //   }
-      //   else
-      //   {
-      //     cent_x = ((x1 + x2) / 2);
-      //   }
-
-      //   if (fabs(x3 - x4) < fabs(y3 - y4))
-      //   {
-      //     cent_y = ((y3 + y4) / 2);
-      //   }
-      //   else
-      //   {
-      //     cent_x = ((x3 + x4) / 2);
-      //   }
-      //   // RCLCPP_INFO(this->get_logger(), "[0]: '%f' [100]: '%f'", laser_->ranges[0], laser_->ranges[100]);
-      //   RCLCPP_INFO(this->get_logger(), "cent_x %f", cent_x);
-      //   RCLCPP_INFO(this->get_logger(), "cent_y %f", cent_y);
     }
     auto pc2_msg_ = std::make_shared<sensor_msgs::msg::PointCloud2>();
     pcl::toROSMsg(cloud_, *pc2_msg_);
@@ -280,29 +303,33 @@ private:
     pc2_msg_->header.stamp = now();
     pc2_msg_->is_dense = false;
     target_cloud_pub_->publish(*pc2_msg_);
-
     sensor_msgs::msg::PointCloud2::SharedPtr cloud_out(new sensor_msgs::msg::PointCloud2());
     pcl::toROSMsg(*cloud_in, *cloud_out);
-    // long unsigned int num_points_out = cloud_out->width;
     cloud_out->header.frame_id = msg->header.frame_id;
     cloud_out->header.stamp = msg->header.stamp;
     filtered_cloud_->publish(*cloud_out);
-    // }
-    // catch (std::exception e)
-    // {
-    //   RCLCPP_INFO(this->get_logger(), "Nothing Found");
-    // }
   }
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr unfiltered_cloud_sub_;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr go_sub_;
 
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr filtered_cloud_;
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr target_cloud_pub_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_pub_;
+
+  bool go_ = false;
+
+  bool pre_position_achieved_ = false;
+  bool heading_achieved_ = false;
+  float pre_target_x_ = NULL;
+  float pre_target_y_ = NULL;
+
   int timeout_count_ = 0;
   float target_x_ = NULL;
   float target_y_ = NULL;
   float target_y_diff_ = NULL;
   int goal_reached_count_ = 0;
+  float L_ = 1.2;
+  float D_ = 1.40;
   rclcpp::TimerBase::SharedPtr cmd_timer_;
 };
 
