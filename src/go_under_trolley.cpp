@@ -34,7 +34,7 @@ public:
     initialize_params();
     refresh_params();
     unfiltered_cloud_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
-        "/cloud_in", rclcpp::SensorDataQoS(),
+        "/cloud_action", rclcpp::SensorDataQoS(),
         std::bind(&GoUnderTrolley::cloud_sub_callback, this, std::placeholders::_1));
     go_sub_ = this->create_subscription<std_msgs::msg::String>(
         "/go_under_trolley", 10, std::bind(&GoUnderTrolley::go_sub_callback, this, std::placeholders::_1));
@@ -45,7 +45,7 @@ public:
 
     cmd_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
 
-    cmd_timer_ = this->create_wall_timer(50ms, std::bind(&GoUnderTrolley::cmd_callback, this));
+    // cmd_timer_ = this->create_wall_timer(50ms, std::bind(&GoUnderTrolley::cmd_callback, this));
   }
 
 private:
@@ -134,7 +134,7 @@ private:
           }
           if (fabs(vel_msg_.angular.z) >= maxAngularVel_)
             vel_msg_.angular.z = maxAngularVel_ * (fabs(vel_msg_.angular.z) / vel_msg_.angular.z);
-          cmd_pub_->publish(vel_msg_);
+          // cmd_pub_->publish(vel_msg_);
         }
       }
     }
@@ -160,7 +160,7 @@ private:
     pcl::removeNaNFromPointCloud(*cloud_in, *cloud_in, indices);
     tree->setInputCloud(cloud_in);
 
-    RCLCPP_INFO(this->get_logger(), "Created Tree");
+    // RCLCPP_INFO(this->get_logger(), "Created Tree");
 
     // clustering points in point cloud for identifying the legs of items to pickup
     std::vector<pcl::PointIndices> cluster_indices;
@@ -230,14 +230,21 @@ private:
           }
         }
 
-        if (fabs(x1) < minTrolleyDistance_ && fabs(x2) < minTrolleyDistance_)
+        if (
+              fabs(x1) < minTrolleyDistance_  
+              && fabs(x2) < minTrolleyDistance_  
+              && fabs(y1) < 1.5 
+              && fabs(y2) < 1.5
+            )
         {
           float distance = sqrt(((x2 - x1) * (x2 - x1)) + ((y2 - y1) * (y2 - y1)));
           distance = fabs(distance);
 
           if (distance < maxTrolleyGap_ && distance > minTrolleyGap_)
           {
-            // RCLCPP_INFO(this->get_logger(), "distance %f", distance);
+            
+            RCLCPP_INFO(this->get_logger(), "distance %f at %f,%f and %f,%f", distance, x1, y1, x2, y2);
+            
             std::pair<float, float> first_point_pair;
             first_point_pair.first = x1;
             first_point_pair.second = y1;
@@ -253,7 +260,7 @@ private:
       }
     }
 
-    // RCLCPP_INFO(this->get_logger(), "length %ld", length_points.size());
+    RCLCPP_INFO(this->get_logger(), "length %ld", length_points.size());
     // RCLCPP_INFO(this->get_logger(), "breadth %ld", breadth_points.size());
     pcl::PointCloud<pcl::PointXYZRGB> cloud_;
     pcl::PointXYZRGB pt;
